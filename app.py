@@ -84,6 +84,17 @@ if st.session_state.step == 1:
         type=['csv'],
         help="Upload a CSV file containing meal information with nutritional data"
     )
+
+    if st.button("🚀 Use Default Meal Database", key="use_default", type="primary"):
+    # Cargar tu CSV por defecto
+    df = pd.read_csv('lunchplandef3.csv')
+    st.session_state.csv_data = df
+    st.session_state.using_default = True
+    st.success(f"✅ Default database loaded! {len(df)} meals available.")
+    
+    if st.button("Continue to Preferences ➡️", key="continue_default"):
+        st.session_state.step = 2
+        st.rerun()
     
     # Show required columns
     with st.expander("📋 Required CSV Columns"):
