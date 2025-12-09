@@ -1,5 +1,5 @@
 # smart-dining-dashboard
-optimal weekly meal planner
+
 # 🍽️ Smart Dining on Campus - Weekly Meal Optimizer
 
 An interactive dashboard that creates personalized weekly meal plans using linear programming optimization.
