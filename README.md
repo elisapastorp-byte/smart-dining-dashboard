@@ -46,10 +46,4 @@ The system automatically applies:
 - **Pandas**: Data manipulation
 - **Plotly**: Interactive charts
 
-## Author
 
-Operations Research Project - University Course
-
-## License
-
-Educational Use Only
