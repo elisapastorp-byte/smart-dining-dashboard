@@ -27,13 +27,6 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-    }
     .stButton>button {
         width: 100%;
         background-color: #2563EB;
@@ -45,6 +38,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Required columns
+REQUIRED_COLUMNS = ['Restaurant', 'Meal', 'price', 'calories_kcal', 'protein_g', 'fat_g', 
+                   'sugar_g', 'contains_gluten', 'contains_lactose', 'diabetic_friendly', 
+                   'vegan ', 'vegetarian', 'pescatarian', 'kosher', 'halal', 'contains_nuts', 
+                   'contains_lactose.1', 'carbs_g', 'calcium_mg', 'fiber_mg', 'cholesterol_mg', 
+                   'potassium_mg', 'iron_mg', 'sodium_mg', 'contains_grains', 'contains_legumes', 
+                   'contains_bread', 'contains_dairy', 'keto_friendly', 'gaining_weight_diet', 
+                   'loose_weight_diet', 'gaining_muscle_diet', 'spicy', 'fried', 'grilled ', 
+                   'baked', 'boiled']
+
 # Initialize session state
 if 'step' not in st.session_state:
     st.session_state.step = 1
@@ -52,6 +55,8 @@ if 'csv_data' not in st.session_state:
     st.session_state.csv_data = None
 if 'results' not in st.session_state:
     st.session_state.results = None
+if 'using_default' not in st.session_state:
+    st.session_state.using_default = False
 
 # Header
 st.markdown('<div class="main-header">🍽️ Smart Dining on Campus</div>', unsafe_allow_html=True)
@@ -72,32 +77,73 @@ st.markdown("---")
 if st.session_state.step == 1:
     st.header("📤 Step 1: Upload Your Meal Database")
     
+    st.info("💡 **Tip**: You can upload your own CSV file or use our default meal database to get started immediately!")
+    
     uploaded_file = st.file_uploader(
-        "Choose a CSV file with your meal data",
+        "Choose a CSV file with your meal data (optional)",
         type=['csv'],
         help="Upload a CSV file containing meal information with nutritional data"
     )
     
-    if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.csv_data = df
-            
-            st.success(f"✅ File loaded successfully! {len(df)} meals available.")
-            
-            with st.expander("📊 Preview Data"):
-                st.dataframe(df.head(10))
-            
-            if st.button("Continue to Preferences ➡️", key="continue_step1"):
-                st.session_state.step = 2
-                st.rerun()
+    # Show required columns
+    with st.expander("📋 Required CSV Columns"):
+        st.write("Your CSV must contain these columns:")
+        cols_display = st.columns(3)
+        for idx, col in enumerate(REQUIRED_COLUMNS):
+            with cols_display[idx % 3]:
+                st.write(f"• `{col}`")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if uploaded_file is not None:
+            try:
+                df = pd.read_csv(uploaded_file)
                 
-        except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
+                # Validate columns
+                missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+                
+                if missing_cols:
+                    st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+                    st.warning("Please upload a CSV with all required columns or use the default database.")
+                else:
+                    st.session_state.csv_data = df
+                    st.session_state.using_default = False
+                    st.success(f"✅ File loaded successfully! {len(df)} meals available.")
+                    
+                    with st.expander("📊 Preview Your Data"):
+                        st.dataframe(df.head(10))
+                    
+                    if st.button("Continue to Preferences ➡️", key="continue_uploaded"):
+                        st.session_state.step = 2
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"Error loading file: {str(e)}")
+    
+    with col2:
+        st.markdown("### Or use default database")
+        if st.button("🚀 Use Default Meal Database", key="use_default", type="primary"):
+            # Here you would load your default CSV
+            # For now, we'll create a placeholder
+            st.session_state.using_default = True
+            st.info("⚠️ **Action Required**: Please upload your `lunchplandef3.csv` file to GitHub")
+            st.markdown("""
+            **To add your default database:**
+            1. Go to your GitHub repository
+            2. Click "Add file" → "Upload files"
+            3. Upload your `lunchplandef3.csv`
+            4. Update the code to load: `df = pd.read_csv('lunchplandef3.csv')`
+            
+            For now, you can upload your CSV above to continue.
+            """)
 
 # ==================== STEP 2: PREFERENCES ====================
 elif st.session_state.step == 2:
     st.header("⚙️ Step 2: Set Your Preferences")
+    
+    if st.session_state.using_default:
+        st.info("📊 Using default meal database")
     
     col1, col2 = st.columns(2)
     
@@ -146,28 +192,31 @@ elif st.session_state.step == 2:
     
     with col_optimize:
         if st.button("🚀 Generate Optimal Plan", key="optimize_btn"):
-            with st.spinner("Optimizing your meal plan... This may take a few seconds."):
-                try:
-                    # Store preferences
-                    preferences = {
-                        'diabetic': diabetic, 'celiac': celiac, 'lactose_intolerant': lactose_intolerant,
-                        'nut_allergy': nut_allergy, 'vegan': vegan, 'vegetarian': vegetarian,
-                        'pescatarian': pescatarian, 'keto': keto, 'kosher': kosher, 'halal': halal,
-                        'gain_weight': gain_weight, 'lose_weight': lose_weight, 'gain_muscle': gain_muscle,
-                        'avoid_grains': avoid_grains, 'avoid_legumes': avoid_legumes, 'avoid_bread': avoid_bread,
-                        'avoid_dairy': avoid_dairy, 'avoid_spicy': avoid_spicy, 'avoid_fried': avoid_fried,
-                        'gender': gender, 'budget': budget
-                    }
-                    
-                    # Run optimization
-                    results = run_optimization(st.session_state.csv_data, preferences)
-                    st.session_state.results = results
-                    st.session_state.step = 3
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Optimization failed: {str(e)}")
-                    st.info("Try relaxing some constraints or increasing your budget.")
+            if st.session_state.csv_data is None:
+                st.error("❌ Please upload a CSV file first or use the default database.")
+            else:
+                with st.spinner("Optimizing your meal plan... This may take a few seconds."):
+                    try:
+                        # Store preferences
+                        preferences = {
+                            'diabetic': diabetic, 'celiac': celiac, 'lactose_intolerant': lactose_intolerant,
+                            'nut_allergy': nut_allergy, 'vegan': vegan, 'vegetarian': vegetarian,
+                            'pescatarian': pescatarian, 'keto': keto, 'kosher': kosher, 'halal': halal,
+                            'gain_weight': gain_weight, 'lose_weight': lose_weight, 'gain_muscle': gain_muscle,
+                            'avoid_grains': avoid_grains, 'avoid_legumes': avoid_legumes, 'avoid_bread': avoid_bread,
+                            'avoid_dairy': avoid_dairy, 'avoid_spicy': avoid_spicy, 'avoid_fried': avoid_fried,
+                            'gender': gender, 'budget': budget
+                        }
+                        
+                        # Run optimization
+                        results = run_optimization(st.session_state.csv_data, preferences)
+                        st.session_state.results = results
+                        st.session_state.step = 3
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Optimization failed: {str(e)}")
+                        st.info("Try relaxing some constraints or increasing your budget.")
 
 # ==================== STEP 3: RESULTS ====================
 elif st.session_state.step == 3 and st.session_state.results is not None:
@@ -278,16 +327,17 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
             st.session_state.step = 1
             st.session_state.csv_data = None
             st.session_state.results = None
+            st.session_state.using_default = False
             st.rerun()
 
 
 # ==================== OPTIMIZATION FUNCTION ====================
 def run_optimization(df, preferences):
-    """Run the meal plan optimization"""
+    """Run the meal plan optimization using PuLP"""
     
     filtered = df.copy()
     
-    # Apply filters
+    # Apply filters based on preferences
     if preferences['diabetic']:
         filtered = filtered[filtered['diabetic_friendly'] == 1]
     if preferences['celiac']:
@@ -297,7 +347,7 @@ def run_optimization(df, preferences):
     if preferences['nut_allergy']:
         filtered = filtered[filtered['contains_nuts'] == 0]
     if preferences['vegan']:
-        filtered = filtered[filtered['vegan'] == 1]
+        filtered = filtered[filtered['vegan '] == 1]  # Note the space in column name
     if preferences['vegetarian']:
         filtered = filtered[filtered['vegetarian'] == 1]
     if preferences['pescatarian']:
@@ -339,7 +389,7 @@ def run_optimization(df, preferences):
     meals = ["Lunch", "Dinner"]
     restaurants = filtered["Restaurant"].unique().tolist()
     
-    # Nutritional targets
+    # Nutritional targets based on gender
     if preferences['gender'] == "male":
         cal_min, cal_max = 1100, 1600
         protein_min = 50
@@ -367,6 +417,8 @@ def run_optimization(df, preferences):
     )
     prob += total_cost
     
+    # CONSTRAINTS
+    
     # Budget constraint
     prob += total_cost <= preferences['budget'], "BudgetConstraint"
     
@@ -387,10 +439,19 @@ def run_optimization(df, preferences):
             if filtered.loc[i, "Restaurant"] == r
         ) <= 5, f"MaxRestaurantWeek_{r}"
     
-    # Solve
-    prob.solve(pl.PULP_CBC_CMD(msg=0))
+    # Max 1 meal per restaurant per day
+    for d in days:
+        for r in restaurants:
+            prob += pl.lpSum(
+                x[(i, d, m)]
+                for i in meal_indices for m in meals
+                if filtered.loc[i, "Restaurant"] == r
+            ) <= 1, f"MaxRestaurantDay_{d}_{r}"
     
-    if pl.LpStatus[prob.status] != "Optimal":
+    # Solve
+    status = prob.solve(pl.PULP_CBC_CMD(msg=0))
+    
+    if pl.LpStatus[status] != "Optimal":
         raise Exception("Could not find optimal solution. Try relaxing constraints or increasing budget.")
     
     # Extract results
