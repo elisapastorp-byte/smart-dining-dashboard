@@ -3,6 +3,7 @@ import pandas as pd
 import pulp as pl
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
 # Page configuration
 st.set_page_config(
@@ -58,6 +59,18 @@ if 'results' not in st.session_state:
 if 'using_default' not in st.session_state:
     st.session_state.using_default = False
 
+# Function to load default CSV
+def load_default_csv():
+    """Try to load the default CSV file"""
+    try:
+        if os.path.exists('lunchplandef3.csv'):
+            return pd.read_csv('lunchplandef3.csv')
+        else:
+            return None
+    except Exception as e:
+        st.error(f"Error loading default database: {str(e)}")
+        return None
+
 # Header
 st.markdown('<div class="main-header">🍽️ Smart Dining on Campus</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Your personalized weekly meal optimization system</div>', unsafe_allow_html=True)
@@ -79,34 +92,25 @@ if st.session_state.step == 1:
     
     st.info("💡 **Tip**: You can upload your own CSV file or use our default meal database to get started immediately!")
     
-    uploaded_file = st.file_uploader(
-        "Choose a CSV file with your meal data (optional)",
-        type=['csv'],
-        help="Upload a CSV file containing meal information with nutritional data"
-    )
-
-    if st.button("🚀 Use Default Meal Database", key="use_default", type="primary"):
-    # Cargar tu CSV por defecto
-    df = pd.read_csv('lunchplandef3.csv')
-    st.session_state.csv_data = df
-    st.session_state.using_default = True
-    st.success(f"✅ Default database loaded! {len(df)} meals available.")
-    
-    if st.button("Continue to Preferences ➡️", key="continue_default"):
-        st.session_state.step = 2
-        st.rerun()
-    
-    # Show required columns
-    with st.expander("📋 Required CSV Columns"):
-        st.write("Your CSV must contain these columns:")
+    # Show required columns in expander
+    with st.expander("📋 Required CSV Columns (Click to expand)"):
+        st.write("**Your CSV must contain ALL of these columns:**")
         cols_display = st.columns(3)
         for idx, col in enumerate(REQUIRED_COLUMNS):
             with cols_display[idx % 3]:
                 st.write(f"• `{col}`")
+        st.warning("⚠️ Column names must match exactly (including spaces and capitalization)")
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([3, 2])
     
     with col1:
+        st.subheader("Upload Your Own CSV")
+        uploaded_file = st.file_uploader(
+            "Choose a CSV file with your meal data",
+            type=['csv'],
+            help="Upload a CSV file containing meal information with nutritional data"
+        )
+        
         if uploaded_file is not None:
             try:
                 df = pd.read_csv(uploaded_file)
@@ -115,8 +119,12 @@ if st.session_state.step == 1:
                 missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
                 
                 if missing_cols:
-                    st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
-                    st.warning("Please upload a CSV with all required columns or use the default database.")
+                    st.error(f"❌ **Missing required columns ({len(missing_cols)}):**")
+                    for col in missing_cols[:10]:  # Show first 10
+                        st.write(f"   • `{col}`")
+                    if len(missing_cols) > 10:
+                        st.write(f"   ... and {len(missing_cols) - 10} more")
+                    st.warning("Please ensure your CSV has all required columns or use the default database.")
                 else:
                     st.session_state.csv_data = df
                     st.session_state.using_default = False
@@ -133,65 +141,82 @@ if st.session_state.step == 1:
                 st.error(f"Error loading file: {str(e)}")
     
     with col2:
-        st.markdown("### Or use default database")
+        st.subheader("Use Default Database")
+        st.write("Skip the upload and use our pre-loaded meal database")
+        
         if st.button("🚀 Use Default Meal Database", key="use_default", type="primary"):
-            # Here you would load your default CSV
-            # For now, we'll create a placeholder
-            st.session_state.using_default = True
-            st.info("⚠️ **Action Required**: Please upload your `lunchplandef3.csv` file to GitHub")
-            st.markdown("""
-            **To add your default database:**
-            1. Go to your GitHub repository
-            2. Click "Add file" → "Upload files"
-            3. Upload your `lunchplandef3.csv`
-            4. Update the code to load: `df = pd.read_csv('lunchplandef3.csv')`
+            default_df = load_default_csv()
             
-            For now, you can upload your CSV above to continue.
-            """)
+            if default_df is not None:
+                st.session_state.csv_data = default_df
+                st.session_state.using_default = True
+                st.success(f"✅ Default database loaded! {len(default_df)} meals available.")
+                
+                # Auto-advance to next step after 1 second
+                if st.button("Continue to Preferences ➡️", key="continue_default"):
+                    st.session_state.step = 2
+                    st.rerun()
+            else:
+                st.error("❌ Default database not found!")
+                st.info("""
+                **To enable the default database:**
+                1. Upload your `lunchplandef3.csv` to your GitHub repository
+                2. Place it in the same folder as `app.py`
+                3. Commit the changes
+                4. Streamlit will automatically detect it
+                
+                For now, please upload your CSV using the option on the left.
+                """)
 
 # ==================== STEP 2: PREFERENCES ====================
 elif st.session_state.step == 2:
     st.header("⚙️ Step 2: Set Your Preferences")
     
     if st.session_state.using_default:
-        st.info("📊 Using default meal database")
+        st.success("📊 Using default meal database")
+    else:
+        st.info(f"📊 Using uploaded database with {len(st.session_state.csv_data)} meals")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("🏥 Health & Allergies")
-        diabetic = st.checkbox("Diabetic")
-        celiac = st.checkbox("Celiac (Gluten Intolerant)")
-        lactose_intolerant = st.checkbox("Lactose Intolerant")
-        nut_allergy = st.checkbox("Nut Allergy")
+        diabetic = st.checkbox("Diabetic", help="Filter meals suitable for diabetics")
+        celiac = st.checkbox("Celiac (Gluten Intolerant)", help="Exclude meals containing gluten")
+        lactose_intolerant = st.checkbox("Lactose Intolerant", help="Exclude meals with lactose")
+        nut_allergy = st.checkbox("Nut Allergy", help="Exclude meals containing nuts")
         
         st.subheader("🥗 Diet Type")
-        vegan = st.checkbox("Vegan")
-        vegetarian = st.checkbox("Vegetarian")
-        pescatarian = st.checkbox("Pescatarian")
-        keto = st.checkbox("Keto")
+        vegan = st.checkbox("Vegan", help="Only plant-based meals")
+        vegetarian = st.checkbox("Vegetarian", help="No meat, but dairy/eggs OK")
+        pescatarian = st.checkbox("Pescatarian", help="Fish OK, no other meat")
+        keto = st.checkbox("Keto", help="Low-carb, high-fat diet")
         
         st.subheader("🕌 Religious/Cultural")
-        kosher = st.checkbox("Kosher")
-        halal = st.checkbox("Halal")
+        kosher = st.checkbox("Kosher", help="Meals prepared according to Jewish law")
+        halal = st.checkbox("Halal", help="Meals prepared according to Islamic law")
     
     with col2:
         st.subheader("🎯 Health Goals")
-        gain_weight = st.checkbox("Gain Weight")
-        lose_weight = st.checkbox("Lose Weight")
-        gain_muscle = st.checkbox("Gain Muscle")
+        gain_weight = st.checkbox("Gain Weight", help="Higher calorie meals")
+        lose_weight = st.checkbox("Lose Weight", help="Lower calorie meals")
+        gain_muscle = st.checkbox("Gain Muscle", help="High protein meals")
         
         st.subheader("🍽️ Food Preferences")
-        avoid_grains = st.checkbox("Avoid Grains")
-        avoid_legumes = st.checkbox("Avoid Legumes")
-        avoid_bread = st.checkbox("Avoid Bread")
-        avoid_dairy = st.checkbox("Avoid Dairy")
-        avoid_spicy = st.checkbox("Avoid Spicy Food")
-        avoid_fried = st.checkbox("Avoid Fried Food")
+        avoid_grains = st.checkbox("Avoid Grains", help="No rice, wheat, oats, etc.")
+        avoid_legumes = st.checkbox("Avoid Legumes", help="No beans, lentils, peas")
+        avoid_bread = st.checkbox("Avoid Bread", help="No bread products")
+        avoid_dairy = st.checkbox("Avoid Dairy", help="No milk, cheese, yogurt")
+        avoid_spicy = st.checkbox("Avoid Spicy Food", help="No hot/spicy dishes")
+        avoid_fried = st.checkbox("Avoid Fried Food", help="No fried preparations")
         
         st.subheader("⚙️ Basic Settings")
-        gender = st.selectbox("Gender", ["male", "female", "other"])
-        budget = st.slider("Weekly Budget ($)", 50, 300, 100, 5)
+        gender = st.selectbox("Gender", ["male", "female", "other"], 
+                             help="Affects nutritional targets")
+        budget = st.slider("Weekly Budget ($)", 50, 300, 100, 5,
+                          help="Maximum amount to spend on meals per week")
+        
+        st.caption(f"💰 Selected budget: **${budget}** for 14 meals")
     
     st.markdown("---")
     col_back, col_optimize = st.columns([1, 2])
@@ -202,11 +227,11 @@ elif st.session_state.step == 2:
             st.rerun()
     
     with col_optimize:
-        if st.button("🚀 Generate Optimal Plan", key="optimize_btn"):
+        if st.button("🚀 Generate Optimal Plan", key="optimize_btn", type="primary"):
             if st.session_state.csv_data is None:
                 st.error("❌ Please upload a CSV file first or use the default database.")
             else:
-                with st.spinner("Optimizing your meal plan... This may take a few seconds."):
+                with st.spinner("🔄 Optimizing your meal plan... This may take 10-30 seconds."):
                     try:
                         # Store preferences
                         preferences = {
@@ -227,7 +252,10 @@ elif st.session_state.step == 2:
                         
                     except Exception as e:
                         st.error(f"❌ Optimization failed: {str(e)}")
-                        st.info("Try relaxing some constraints or increasing your budget.")
+                        st.info("💡 **Suggestions:**")
+                        st.write("• Try increasing your budget")
+                        st.write("• Relax some dietary restrictions")
+                        st.write("• Ensure your CSV has enough meal variety")
 
 # ==================== STEP 3: RESULTS ====================
 elif st.session_state.step == 3 and st.session_state.results is not None:
@@ -239,14 +267,16 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
+        delta_budget = results['budget_used'] - 100
         st.metric("💰 Total Cost", f"${results['total_cost']:.2f}", 
-                 f"{results['budget_used']:.1f}% of budget")
+                 f"{results['budget_used']:.1f}% of budget",
+                 delta_color="inverse")
     with col2:
         st.metric("🔥 Avg Calories/Day", f"{results['avg_calories']:.0f}")
     with col3:
         st.metric("💪 Avg Protein/Day", f"{results['avg_protein']:.1f}g")
     with col4:
-        st.metric("✅ Total Meals", "14")
+        st.metric("✅ Total Meals", "14", "2 per day")
     
     st.markdown("---")
     
@@ -259,32 +289,45 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
     for day in days:
-        st.markdown(f"### {day}")
-        day_meals = plan_df[plan_df['day'] == day]
-        
-        col_lunch, col_dinner = st.columns(2)
-        
-        with col_lunch:
-            lunch = day_meals[day_meals['meal_type'] == 'Lunch'].iloc[0] if len(day_meals[day_meals['meal_type'] == 'Lunch']) > 0 else None
-            if lunch is not None:
-                st.markdown(f"""
-                **🌅 LUNCH**  
-                **{lunch['dish']}**  
-                📍 {lunch['restaurant']}  
-                💵 ${lunch['price']:.2f} | 🔥 {lunch['calories']:.0f} kcal | 💪 {lunch['protein']:.1f}g protein
-                """)
-        
-        with col_dinner:
-            dinner = day_meals[day_meals['meal_type'] == 'Dinner'].iloc[0] if len(day_meals[day_meals['meal_type'] == 'Dinner']) > 0 else None
-            if dinner is not None:
-                st.markdown(f"""
-                **🌙 DINNER**  
-                **{dinner['dish']}**  
-                📍 {dinner['restaurant']}  
-                💵 ${dinner['price']:.2f} | 🔥 {dinner['calories']:.0f} kcal | 💪 {dinner['protein']:.1f}g protein
-                """)
-        
-        st.markdown("---")
+        with st.container():
+            st.markdown(f"### 📆 {day}")
+            day_meals = plan_df[plan_df['day'] == day]
+            
+            col_lunch, col_dinner = st.columns(2)
+            
+            with col_lunch:
+                lunch = day_meals[day_meals['meal_type'] == 'Lunch']
+                if len(lunch) > 0:
+                    lunch = lunch.iloc[0]
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 1.5rem; border-radius: 10px; color: white;">
+                        <h4>🌅 LUNCH</h4>
+                        <h3>{lunch['dish']}</h3>
+                        <p>📍 {lunch['restaurant']}</p>
+                        <hr style="border-color: white; opacity: 0.3;">
+                        <p>💵 ${lunch['price']:.2f} | 🔥 {lunch['calories']:.0f} kcal | 💪 {lunch['protein']:.1f}g</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col_dinner:
+                dinner = day_meals[day_meals['meal_type'] == 'Dinner']
+                if len(dinner) > 0:
+                    dinner = dinner.iloc[0]
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                                padding: 1.5rem; border-radius: 10px; color: white;">
+                        <h4>🌙 DINNER</h4>
+                        <h3>{dinner['dish']}</h3>
+                        <p>📍 {dinner['restaurant']}</p>
+                        <hr style="border-color: white; opacity: 0.3;">
+                        <p>💵 ${dinner['price']:.2f} | 🔥 {dinner['calories']:.0f} kcal | 💪 {dinner['protein']:.1f}g</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+    
+    st.markdown("---")
     
     # Charts
     st.subheader("📈 Nutritional Analysis")
@@ -298,10 +341,11 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
         daily_stats = daily_stats.sort_values('day')
         
         fig_cal = px.bar(daily_stats, x='day', y='calories', 
-                        title='Daily Calories',
+                        title='Daily Calories Distribution',
                         labels={'calories': 'Calories (kcal)', 'day': 'Day'},
                         color='calories',
                         color_continuous_scale='Blues')
+        fig_cal.update_layout(showlegend=False)
         st.plotly_chart(fig_cal, use_container_width=True)
     
     with chart_col2:
@@ -311,30 +355,69 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
         daily_protein = daily_protein.sort_values('day')
         
         fig_prot = px.bar(daily_protein, x='day', y='protein',
-                         title='Daily Protein',
+                         title='Daily Protein Distribution',
                          labels={'protein': 'Protein (g)', 'day': 'Day'},
                          color='protein',
                          color_continuous_scale='Greens')
+        fig_prot.update_layout(showlegend=False)
         st.plotly_chart(fig_prot, use_container_width=True)
+    
+    # Restaurant distribution
+    st.subheader("🏪 Restaurant Variety")
+    restaurant_counts = plan_df['restaurant'].value_counts().reset_index()
+    restaurant_counts.columns = ['Restaurant', 'Meals']
+    
+    fig_rest = px.pie(restaurant_counts, values='Meals', names='Restaurant',
+                      title='Meals per Restaurant',
+                      color_discrete_sequence=px.colors.qualitative.Set3)
+    st.plotly_chart(fig_rest, use_container_width=True)
     
     # Export button
     st.markdown("---")
-    csv_export = plan_df.to_csv(index=False)
-    st.download_button(
-        label="📥 Download Plan as CSV",
-        data=csv_export,
-        file_name="weekly_meal_plan.csv",
-        mime="text/csv"
-    )
+    st.subheader("📥 Export Your Plan")
+    
+    col_export1, col_export2 = st.columns(2)
+    
+    with col_export1:
+        csv_export = plan_df.to_csv(index=False)
+        st.download_button(
+            label="📄 Download as CSV",
+            data=csv_export,
+            file_name="weekly_meal_plan.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    with col_export2:
+        # Summary text
+        summary = f"""
+WEEKLY MEAL PLAN SUMMARY
+========================
+Total Cost: ${results['total_cost']:.2f}
+Budget Used: {results['budget_used']:.1f}%
+Avg Daily Calories: {results['avg_calories']:.0f} kcal
+Avg Daily Protein: {results['avg_protein']:.1f}g
+Total Meals: 14 (2 per day)
+
+Generated by Smart Dining on Campus
+"""
+        st.download_button(
+            label="📝 Download Summary (TXT)",
+            data=summary,
+            file_name="meal_plan_summary.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
     
     # Action buttons
+    st.markdown("---")
     col_modify, col_restart = st.columns(2)
     with col_modify:
-        if st.button("⬅️ Modify Preferences"):
+        if st.button("⬅️ Modify Preferences", use_container_width=True):
             st.session_state.step = 2
             st.rerun()
     with col_restart:
-        if st.button("🔄 Start Over"):
+        if st.button("🔄 Start Over", use_container_width=True):
             st.session_state.step = 1
             st.session_state.csv_data = None
             st.session_state.results = None
@@ -344,7 +427,7 @@ elif st.session_state.step == 3 and st.session_state.results is not None:
 
 # ==================== OPTIMIZATION FUNCTION ====================
 def run_optimization(df, preferences):
-    """Run the meal plan optimization using PuLP"""
+    """Run the meal plan optimization using PuLP linear programming"""
     
     filtered = df.copy()
     
@@ -358,7 +441,7 @@ def run_optimization(df, preferences):
     if preferences['nut_allergy']:
         filtered = filtered[filtered['contains_nuts'] == 0]
     if preferences['vegan']:
-        filtered = filtered[filtered['vegan '] == 1]  # Note the space in column name
+        filtered = filtered[filtered['vegan '] == 1]  # Note: space in column name
     if preferences['vegetarian']:
         filtered = filtered[filtered['vegetarian'] == 1]
     if preferences['pescatarian']:
@@ -389,7 +472,7 @@ def run_optimization(df, preferences):
         filtered = filtered[filtered['fried'] == 0]
     
     if len(filtered) < 14:
-        raise Exception(f"Not enough meals after filtering. Only {len(filtered)} meals available. Need at least 14.")
+        raise Exception(f"Not enough meals after filtering. Only {len(filtered)} meals available. Need at least 14 meals to create a weekly plan.")
     
     # Reset index
     filtered = filtered.reset_index(drop=True)
@@ -414,35 +497,35 @@ def run_optimization(df, preferences):
     # Create optimization problem
     prob = pl.LpProblem("WeeklyMealPlan", pl.LpMinimize)
     
-    # Decision variables
+    # Decision variables: x[i,d,m] = 1 if meal i is chosen on day d for meal type m
     x = {}
     for i in meal_indices:
         for d in days:
             for m in meals:
                 x[(i, d, m)] = pl.LpVariable(f"x_{i}_{d}_{m}", cat="Binary")
     
-    # Objective: minimize cost
+    # Objective function: minimize total cost
     total_cost = pl.lpSum(
         filtered.loc[i, "price"] * x[(i, d, m)]
         for i in meal_indices for d in days for m in meals
     )
     prob += total_cost
     
-    # CONSTRAINTS
+    # ==================== CONSTRAINTS ====================
     
-    # Budget constraint
+    # C1: Budget constraint
     prob += total_cost <= preferences['budget'], "BudgetConstraint"
     
-    # Exactly 1 meal per (day, meal type)
+    # C2: Exactly 1 meal per (day, meal type)
     for d in days:
         for m in meals:
             prob += pl.lpSum(x[(i, d, m)] for i in meal_indices) == 1, f"OneMeal_day{d}_{m}"
     
-    # Each dish max once per week
+    # C3: Each dish max once per week (no repeats)
     for i in meal_indices:
         prob += pl.lpSum(x[(i, d, m)] for d in days for m in meals) <= 1, f"UniqueMeal_{i}"
     
-    # Max 5 meals from same restaurant per week
+    # C4: Max 5 meals from same restaurant per week
     for r in restaurants:
         prob += pl.lpSum(
             x[(i, d, m)]
@@ -450,7 +533,7 @@ def run_optimization(df, preferences):
             if filtered.loc[i, "Restaurant"] == r
         ) <= 5, f"MaxRestaurantWeek_{r}"
     
-    # Max 1 meal per restaurant per day
+    # C5: Max 1 meal per restaurant per day
     for d in days:
         for r in restaurants:
             prob += pl.lpSum(
@@ -459,13 +542,29 @@ def run_optimization(df, preferences):
                 if filtered.loc[i, "Restaurant"] == r
             ) <= 1, f"MaxRestaurantDay_{d}_{r}"
     
-    # Solve
+    # C6: No legumes at dinner
+    for d in days:
+        prob += pl.lpSum(
+            x[(i, d, "Dinner")]
+            for i in meal_indices
+            if filtered.loc[i, "contains_legumes"] == 1
+        ) == 0, f"NoLegumesDinner_{d}"
+    
+    # C7: No grains at dinner
+    for d in days:
+        prob += pl.lpSum(
+            x[(i, d, "Dinner")]
+            for i in meal_indices
+            if filtered.loc[i, "contains_grains"] == 1
+        ) == 0, f"NoGrainsDinner_{d}"
+    
+    # Solve the optimization problem
     status = prob.solve(pl.PULP_CBC_CMD(msg=0))
     
     if pl.LpStatus[status] != "Optimal":
-        raise Exception("Could not find optimal solution. Try relaxing constraints or increasing budget.")
+        raise Exception("Could not find optimal solution. Try increasing budget or relaxing some constraints.")
     
-    # Extract results
+    # Extract solution
     plan = []
     for d in days:
         for m in meals:
@@ -482,6 +581,7 @@ def run_optimization(df, preferences):
                         'protein': row['protein_g']
                     })
     
+    # Calculate metrics
     plan_df = pd.DataFrame(plan)
     actual_cost = plan_df['price'].sum()
     avg_calories = plan_df.groupby('day')['calories'].sum().mean()
